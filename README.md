@@ -13,6 +13,13 @@ A CTFd plugin that adds a media library to the admin panel for browsing, uploadi
 - Delete files directly from the interface
 - Optional floating shortcut icon on all admin pages
 
+## Screen
+
+<img width="1052" height="753" alt="media1" src="https://github.com/user-attachments/assets/ec0b5706-6c41-4e1f-908a-5514abece941" />
+<img width="1919" height="861" alt="media2" src="https://github.com/user-attachments/assets/97022b96-d451-4de8-bfe4-aed5177cc914" />
+
+
+
 ## Installation
 
 Copy the `ctfd-media-library-main` folder into your CTFd `plugins/` directory:
