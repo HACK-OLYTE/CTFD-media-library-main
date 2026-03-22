@@ -1,0 +1,6 @@
+{
+  "name": "ctfd-media-library",
+  "version": "1.0.0",
+  "description": "Adds a media library to the CTFd admin panel for managing uploaded files and images.",
+  "author": "Association Hack'olyte - hackolyte.fr"
+}

@@ -1,0 +1,417 @@
+{% extends "admin/base.html" %}
+
+{% block stylesheets %}
+{{ super() }}
+<link rel="stylesheet" href="/plugins/ctfd-media-library-main/assets/media_library.css">
+{% endblock %}
+
+{% block content %}
+<div class="jumbotron">
+  <div class="container">
+    <h1><i class="fas fa-photo-video mr-2"></i>Media Library</h1>
+    <p class="lead">Manage CTFd files and images.</p>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Settings -->
+  <div class="card mb-4">
+    <div class="card-header"><strong>Settings</strong></div>
+    <div class="card-body d-flex align-items-center" style="gap:1rem;">
+      <div class="custom-control custom-switch">
+        <input type="checkbox" class="custom-control-input" id="ml-toggle-icon"
+               {% if show_icon %}checked{% endif %}>
+        <label class="custom-control-label" for="ml-toggle-icon">
+          Show floating icon on admin pages (except this page).
+        </label>
+      </div>
+      <span id="ml-toggle-status" class="small"></span>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="card mb-4">
+    <div class="card-header"><strong>Upload a file</strong></div>
+    <div class="card-body">
+      <div class="ml-upload-row">
+        <div class="custom-file ml-upload-input">
+          <input type="file" class="custom-file-input" id="ml-file-input" multiple>
+          <label class="custom-file-label" for="ml-file-input" id="ml-file-label">Choose files…</label>
+        </div>
+        <button class="btn btn-primary" id="ml-upload-btn">
+          <i class="fas fa-upload mr-1"></i>Upload
+        </button>
+        <span id="ml-upload-status" class="small ml-upload-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTFd Files -->
+  <div class="card">
+    <div class="card-header ml-card-header">
+      <div class="ml-header-title">
+        <i class="fas fa-images mr-2 text-muted"></i>
+        <strong>CTFd Files</strong>
+        <span class="badge badge-secondary ml-2" id="ml-count"></span>
+      </div>
+      
+      <div class="ml-header-filters">
+        <input type="text" class="form-control form-control-sm" id="ml-search"
+               placeholder="Search…">
+        <div class="d-flex align-items-center" style="gap:.4rem;">
+          <select class="form-control form-control-sm" id="ml-filter-type">
+            <option value="">All types</option>
+            <option value="image">Images</option>
+            <option value="pdf">PDF</option>
+            <option value="archive">Archives</option>
+            <option value="other">Other</option>
+          </select>
+          <button class="btn btn-sm btn-outline-secondary flex-shrink-0" id="ml-refresh-btn" title="Refresh">
+            <i class="fas fa-sync"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- Selection bar -->
+    <div id="ml-selected-card" style="display:none; border-bottom:1px solid #e9ecef; background:#f8f9fa;">
+      <div class="px-3 py-2" style="display:flex;flex-direction:column;gap:.4rem;">
+        <!-- Full URL -->
+        <div class="d-flex align-items-center flex-wrap" style="gap:.4rem;">
+          <span class="badge badge-secondary" style="white-space:nowrap;font-size:.7rem;">Full URL</span>
+          <code id="ml-selected-url-full" class="flex-grow-1" style="word-break:break-all;font-size:.8rem;cursor:pointer;" title="Click to copy"></code>
+          <button class="btn btn-sm btn-outline-secondary" id="ml-copy-full-btn" title="Copy full URL">
+            <i class="fas fa-copy mr-1"></i>Copy full URL
+          </button>
+          <span class="small text-success" id="ml-copy-full-ok" style="display:none;"><i class="fas fa-check"></i> Copied!</span>
+        </div>
+        <!-- Short URL -->
+        <div class="d-flex align-items-center flex-wrap" style="gap:.4rem;">
+          <span class="badge badge-light border" style="white-space:nowrap;font-size:.7rem;">Short URL</span>
+          <code id="ml-selected-url-short" class="flex-grow-1" style="word-break:break-all;font-size:.8rem;color:#6c757d;cursor:pointer;" title="Click to copy"></code>
+          <button class="btn btn-sm btn-outline-secondary" id="ml-copy-short-btn" title="Copy short URL">
+            <i class="fas fa-copy mr-1"></i>Copy short URL
+          </button>
+          <span class="small text-success" id="ml-copy-short-ok" style="display:none;"><i class="fas fa-check"></i> Copied!</span>
+        </div>
+        <!-- Actions -->
+        <div class="d-flex align-items-center flex-wrap" style="gap:.4rem;">
+          <button class="btn btn-sm btn-outline-secondary" id="ml-preview-btn" style="display:none;" title="Preview">
+            👁️
+          </button>
+          <a href="#" id="ml-open-btn" target="_blank" class="btn btn-sm btn-outline-info">
+            <i class="fas fa-download mr-1"></i>Download
+          </a>
+          <button class="btn btn-sm btn-outline-danger" id="ml-delete-btn">
+            <i class="fas fa-trash mr-1"></i>Delete
+          </button>
+        </div>
+      </div>
+    </div>
+
+<!-- Image lightbox -->
+<div id="ml-lightbox">
+  <div id="ml-lightbox-backdrop"></div>
+  <div id="ml-lightbox-panel">
+    <div id="ml-lightbox-topbar">
+      <span id="ml-lightbox-filename"></span>
+      <button id="ml-lightbox-close" title="Close (Escape)"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="ml-lightbox-imgwrap">
+      <img id="ml-lightbox-img" src="" alt="">
+    </div>
+  </div>
+</div>
+
+    <!-- Scrollable file grid -->
+    <div class="card-body p-3">
+      <div id="ml-grid" class="ml-strip"></div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function waitReady() {
+  if (!window.CTFd || !window.CTFd.fetch) { setTimeout(waitReady, 80); return; }
+
+  var _all = [];
+  var _selectedId = null;
+
+  var EXT_ICONS = {
+    png: 'fas fa-image text-info', jpg: 'fas fa-image text-info',
+    jpeg: 'fas fa-image text-info', gif: 'fas fa-image text-info',
+    svg: 'fas fa-image text-info', webp: 'fas fa-image text-info',
+    bmp: 'fas fa-image text-info',
+    pdf: 'fas fa-file-pdf text-danger',
+    zip: 'fas fa-file-archive text-warning', tar: 'fas fa-file-archive text-warning',
+    gz: 'fas fa-file-archive text-warning', rar: 'fas fa-file-archive text-warning',
+    txt: 'fas fa-file-alt', md: 'fas fa-file-alt',
+    js: 'fas fa-file-code text-success', py: 'fas fa-file-code text-success',
+    html: 'fas fa-file-code text-success', css: 'fas fa-file-code text-success',
+  };
+
+  function ext(loc) { return loc.split('.').pop().toLowerCase(); }
+  function isImage(loc) { return /\.(png|jpe?g|gif|svg|webp|bmp)$/i.test(loc); }
+  function isPdf(loc) { return /\.pdf$/i.test(loc); }
+  function isArchive(loc) { return /\.(zip|tar|gz|rar|7z)$/i.test(loc); }
+  function iconClass(loc) { return EXT_ICONS[ext(loc)] || 'fas fa-file text-secondary'; }
+
+  // Load files
+  function loadFiles() {
+    document.getElementById('ml-grid').innerHTML =
+      '<div class="w-100 text-center py-4 text-muted"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+
+    fetch('/api/v1/files?type=page', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        _all = data.data || [];
+        renderGrid();
+      })
+      .catch(function () {
+        document.getElementById('ml-grid').innerHTML =
+          '<div class="w-100 text-danger py-3">Loading error.</div>';
+      });
+  }
+
+  // Render grid
+  function renderGrid() {
+    var search = document.getElementById('ml-search').value.toLowerCase().trim();
+    var type = document.getElementById('ml-filter-type').value;
+
+    var files = _all.filter(function (f) {
+      if (search && !f.location.toLowerCase().includes(search)) return false;
+      if (type === 'image' && !isImage(f.location)) return false;
+      if (type === 'pdf' && !isPdf(f.location)) return false;
+      if (type === 'archive' && !isArchive(f.location)) return false;
+      if (type === 'other' && (isImage(f.location) || isPdf(f.location) || isArchive(f.location))) return false;
+      return true;
+    });
+
+    document.getElementById('ml-count').textContent =
+      files.length + ' file' + (files.length !== 1 ? 's' : '');
+
+    if (!files.length) {
+      document.getElementById('ml-grid').innerHTML =
+        '<div class="w-100 text-muted text-center py-4">No files.</div>';
+      return;
+    }
+
+    var grid = document.getElementById('ml-grid');
+    grid.innerHTML = '';
+
+    files.forEach(function (f) {
+      var id = parseInt(f.id, 10);
+      var url = '/files/' + f.location;
+      var name = f.location.split('/').pop();
+      var sel = id === _selectedId ? ' selected' : '';
+
+      var card = document.createElement('div');
+      card.className = 'card ml-card' + sel;
+      card.dataset.id = id;
+
+      if (isImage(f.location)) {
+        var img = document.createElement('img');
+        img.src = url;
+        img.className = 'ml-thumb';
+        img.alt = name;
+        card.appendChild(img);
+      } else {
+        var wrap = document.createElement('div');
+        wrap.className = 'ml-icon-wrap';
+        var ic = document.createElement('i');
+        ic.className = iconClass(f.location) + ' fa-3x';
+        wrap.appendChild(ic);
+        card.appendChild(wrap);
+      }
+
+      var body = document.createElement('div');
+      body.className = 'card-body';
+      var small = document.createElement('small');
+      small.title = name;
+      small.textContent = name;
+      body.appendChild(small);
+      card.appendChild(body);
+
+      card.addEventListener('click', function () {
+        document.querySelectorAll('.ml-card').forEach(function (c) { c.classList.remove('selected'); });
+        card.classList.add('selected');
+        _selectedId = id;
+        var fullUrl = window.location.origin + url;
+        document.getElementById('ml-selected-url-full').textContent = fullUrl;
+        document.getElementById('ml-selected-url-short').textContent = url;
+        document.getElementById('ml-open-btn').href = fullUrl;
+        document.getElementById('ml-delete-btn').dataset.id = id;
+        document.getElementById('ml-selected-card').style.display = '';
+        document.getElementById('ml-copy-full-ok').style.display = 'none';
+        document.getElementById('ml-copy-short-ok').style.display = 'none';
+        var previewBtn = document.getElementById('ml-preview-btn');
+        previewBtn.style.display = isImage(f.location) ? '' : 'none';
+        previewBtn.dataset.src = url;
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  // File input label
+  document.getElementById('ml-file-input').addEventListener('change', function () {
+    var names = Array.from(this.files).map(function (f) { return f.name; }).join(', ');
+    document.getElementById('ml-file-label').textContent = names || 'Choose files…';
+  });
+
+  // Upload
+  document.getElementById('ml-upload-btn').addEventListener('click', function () {
+    var input = document.getElementById('ml-file-input');
+    var status = document.getElementById('ml-upload-status');
+
+    if (!input.files.length) {
+      status.textContent = 'Please select a file.';
+      status.className = 'small text-warning';
+      return;
+    }
+
+    var fd = new FormData();
+    Array.from(input.files).forEach(function (f) { fd.append('file', f); });
+    fd.append('type', 'page');
+    fd.append('nonce', CTFd.config.csrfNonce);
+
+    status.textContent = 'Uploading…';
+    status.className = 'small';
+
+    fetch('/api/v1/files', {
+      method: 'POST',
+      credentials: 'same-origin',
+      body: fd,
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          status.textContent = '✓ Uploaded!';
+          status.className = 'small text-success';
+          input.value = '';
+          document.getElementById('ml-file-label').textContent = 'Choose files…';
+          setTimeout(function () { status.textContent = ''; }, 3000);
+          loadFiles();
+        } else {
+          status.textContent = 'Error: ' + JSON.stringify(data.errors || data.message || 'unknown');
+          status.className = 'small text-danger';
+        }
+      })
+      .catch(function () {
+        status.textContent = 'Network error.';
+        status.className = 'small text-danger';
+      });
+  });
+
+  // Copy full / short
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return Promise.resolve();
+  }
+  function copyAndFlash(textEl, okEl) {
+    copyText(textEl.textContent).then(function () {
+      okEl.style.display = '';
+      setTimeout(function () { okEl.style.display = 'none'; }, 2000);
+    });
+  }
+  document.getElementById('ml-copy-full-btn').addEventListener('click', function () {
+    copyAndFlash(document.getElementById('ml-selected-url-full'), document.getElementById('ml-copy-full-ok'));
+  });
+  document.getElementById('ml-selected-url-full').addEventListener('click', function () {
+    copyAndFlash(this, document.getElementById('ml-copy-full-ok'));
+  });
+  document.getElementById('ml-copy-short-btn').addEventListener('click', function () {
+    copyAndFlash(document.getElementById('ml-selected-url-short'), document.getElementById('ml-copy-short-ok'));
+  });
+  document.getElementById('ml-selected-url-short').addEventListener('click', function () {
+    copyAndFlash(this, document.getElementById('ml-copy-short-ok'));
+  });
+
+  // Image preview (lightbox)
+  var lightbox = document.getElementById('ml-lightbox');
+  var lightboxImg = document.getElementById('ml-lightbox-img');
+  var lightboxFilename = document.getElementById('ml-lightbox-filename');
+  function openLightbox(src) {
+    lightboxImg.src = src;
+    lightboxFilename.textContent = src.split('/').pop();
+    lightbox.classList.add('open');
+  }
+  function closeLightbox() {
+    lightbox.classList.remove('open');
+    lightboxImg.src = '';
+  }
+  document.getElementById('ml-preview-btn').addEventListener('click', function () {
+    openLightbox(this.dataset.src);
+  });
+  document.getElementById('ml-lightbox-close').addEventListener('click', closeLightbox);
+  document.getElementById('ml-lightbox-backdrop').addEventListener('click', closeLightbox);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeLightbox();
+  });
+
+  // Delete
+  document.getElementById('ml-delete-btn').addEventListener('click', function () {
+    var id = this.dataset.id;
+    if (!id || !confirm('Permanently delete this file?')) return;
+
+    CTFd.fetch('/api/v1/files/' + id, { method: 'DELETE' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          _selectedId = null;
+          document.getElementById('ml-selected-card').style.display = 'none';
+          loadFiles();
+        } else {
+          alert('Error while deleting.');
+        }
+      });
+  });
+
+  // Filters
+  document.getElementById('ml-refresh-btn').addEventListener('click', loadFiles);
+  document.getElementById('ml-search').addEventListener('input', renderGrid);
+  document.getElementById('ml-filter-type').addEventListener('change', renderGrid);
+
+  loadFiles();
+
+  // Toggle floating icon
+  document.getElementById('ml-toggle-icon').addEventListener('change', function () {
+    var enabled = this.checked;
+    var status = document.getElementById('ml-toggle-status');
+    fetch('/plugins/media-library/toggle-icon', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'CSRF-Token': CTFd.config.csrfNonce },
+      body: JSON.stringify({ enabled: enabled }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          status.textContent = enabled ? '✓ Icon enabled' : '✓ Icon disabled';
+          status.className = 'small text-success';
+        } else {
+          status.textContent = 'Error';
+          status.className = 'small text-danger';
+        }
+        setTimeout(function () { status.textContent = ''; }, 3000);
+      })
+      .catch(function () {
+        status.textContent = 'Network error.';
+        status.className = 'small text-danger';
+      });
+  });
+}());
+</script>
+{% endblock %}

@@ -1,0 +1,198 @@
+<div id="ml-fab-wrap">
+  <button id="ml-fab" title="Media Library">
+    <i class="fas fa-photo-video"></i>
+  </button>
+  <div id="ml-fab-popup" style="display:none;">
+    <div id="ml-fab-header">
+      <span><i class="fas fa-photo-video mr-2"></i>Media</span>
+      <div style="display:flex;align-items:center;gap:.4rem;">
+        <input type="text" id="ml-fab-search" placeholder="Search...">
+        <a href="/plugins/media-library/" target="_blank" id="ml-fab-open-page" title="Open media library" style="color:#adb5bd;font-size:1rem;line-height:1;text-decoration:none;"><i class="fas fa-external-link-alt"></i></a>
+        <button id="ml-fab-close" title="Close">&times;</button>
+      </div>
+    </div>
+    <div id="ml-fab-url-bar" style="display:none;">
+      <div style="display:flex;flex-direction:column;gap:.3rem;width:100%;">
+        <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;">
+          <span style="font-size:.68rem;background:#6c757d;color:#fff;border-radius:3px;padding:.1rem .35rem;white-space:nowrap;">Full</span>
+          <code id="ml-fab-url-full" style="flex:1;word-break:break-all;font-size:.7rem;color:#343a40;cursor:pointer;" title="Click to copy"></code>
+          <button id="ml-fab-copy-full" style="background:none;border:1px solid #ced4da;border-radius:4px;cursor:pointer;padding:.1rem .35rem;font-size:.72rem;color:#495057;" title="Copy full"><i class="fas fa-copy"></i> full</button>
+          <span id="ml-fab-copy-full-ok" style="display:none;color:#28a745;font-size:.75rem;">&#10003;</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;">
+          <span style="font-size:.68rem;background:#e9ecef;color:#495057;border-radius:3px;padding:.1rem .35rem;white-space:nowrap;">Short</span>
+          <code id="ml-fab-url-short" style="flex:1;word-break:break-all;font-size:.7rem;color:#6c757d;cursor:pointer;" title="Click to copy"></code>
+          <button id="ml-fab-copy-short" style="background:none;border:1px solid #ced4da;border-radius:4px;cursor:pointer;padding:.1rem .35rem;font-size:.72rem;color:#495057;" title="Copy short"><i class="fas fa-copy"></i> short</button>
+          <span id="ml-fab-copy-short-ok" style="display:none;color:#28a745;font-size:.75rem;">&#10003;</span>
+        </div>
+      </div>
+    </div>
+    <div id="ml-fab-grid"></div>
+  </div>
+</div>
+<style>
+#ml-fab{position:fixed;bottom:22px;left:22px;z-index:9998;width:48px;height:48px;border-radius:50%;background:#343a40;color:#fff;border:none;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.35);font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:background .2s,transform .15s;}
+#ml-fab:hover{background:#007bff;transform:scale(1.08);}
+#ml-fab-wrap{position:fixed;bottom:22px;left:22px;z-index:9999;}
+#ml-fab-popup{position:fixed;bottom:80px;left:22px;width:340px;max-height:500px;background:#fff;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;z-index:9999;}
+#ml-fab-header{display:flex;align-items:center;justify-content:space-between;padding:.55rem .8rem;background:#343a40;color:#fff;font-size:.88rem;font-weight:600;gap:.5rem;}
+#ml-fab-search{background:#495057;border:1px solid #6c757d;color:#fff;border-radius:4px;padding:.2rem .5rem;font-size:.78rem;width:110px;outline:none;}
+#ml-fab-search::placeholder{color:#adb5bd;}
+#ml-fab-close{background:none;border:none;color:#adb5bd;font-size:1.3rem;cursor:pointer;line-height:1;padding:0 .15rem;}
+#ml-fab-close:hover{color:#fff;}
+#ml-fab-url-bar{padding:.45rem .7rem;background:#f8f9fa;border-bottom:1px solid #e9ecef;}
+#ml-fab-open-page:hover{color:#fff!important;}
+#ml-fab-copy-full:hover,#ml-fab-copy-short:hover{background:#e9ecef;}
+#ml-fab-grid{overflow-y:auto;flex:1;padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start;}
+.ml-fab-card{cursor:pointer;flex:0 0 88px;width:88px;border:2px solid #e9ecef;border-radius:6px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.07);transition:border-color .15s,transform .12s;}
+.ml-fab-card:hover{border-color:#adb5bd;transform:translateY(-2px);}
+.ml-fab-card.selected{border-color:#007bff;}
+.ml-fab-card img{width:100%;height:66px;object-fit:cover;display:block;}
+.ml-fab-icon{height:66px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%);}
+.ml-fab-name{font-size:.6rem;color:#495057;padding:.2rem .3rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-top:1px solid #e9ecef;background:#fafafa;}
+.ml-fab-loading{width:100%;text-align:center;padding:1.5rem;color:#6c757d;}
+@media(max-width:480px){
+  #ml-fab-popup{left:8px;right:8px;width:auto;max-height:70vh;}
+  #ml-fab-wrap{bottom:16px;left:16px;}
+  #ml-fab{bottom:16px;left:16px;}
+  #ml-fab-search{width:80px;}
+}
+</style>
+<script>
+(function(){
+  var fab = document.getElementById('ml-fab');
+  var popup = document.getElementById('ml-fab-popup');
+  var grid = document.getElementById('ml-fab-grid');
+  var searchInput = document.getElementById('ml-fab-search');
+  var urlBar = document.getElementById('ml-fab-url-bar');
+  var urlFullEl = document.getElementById('ml-fab-url-full');
+  var urlShortEl = document.getElementById('ml-fab-url-short');
+  var copyFullBtn = document.getElementById('ml-fab-copy-full');
+  var copyShortBtn = document.getElementById('ml-fab-copy-short');
+  var copyFullOk = document.getElementById('ml-fab-copy-full-ok');
+  var copyShortOk = document.getElementById('ml-fab-copy-short-ok');
+  var _all = [], _loaded = false;
+
+  function isImg(loc){return /\.(png|jpe?g|gif|svg|webp|bmp)$/i.test(loc);}
+  function iconCls(loc){
+    if(isImg(loc)) return 'fas fa-image text-info';
+    if(/\.pdf$/i.test(loc)) return 'fas fa-file-pdf text-danger';
+    if(/\.(zip|tar|gz|rar|7z)$/i.test(loc)) return 'fas fa-file-archive text-warning';
+    return 'fas fa-file text-secondary';
+  }
+
+  function setGridMsg(text, cls){
+    grid.textContent = '';
+    var d = document.createElement('div');
+    d.className = 'ml-fab-loading' + (cls ? ' ' + cls : '');
+    d.textContent = text;
+    grid.appendChild(d);
+  }
+
+  function renderFabGrid(){
+    var q = searchInput.value.toLowerCase().trim();
+    var files = _all.filter(function(f){ return !q || f.location.toLowerCase().includes(q); });
+    grid.textContent = '';
+    if(!files.length){ setGridMsg('No files.'); return; }
+    files.forEach(function(f){
+      var url = window.location.origin + '/files/' + f.location;
+      var name = f.location.split('/').pop();
+      var card = document.createElement('div');
+      card.className = 'ml-fab-card';
+      if(isImg(f.location)){
+        var img = document.createElement('img');
+        img.src = '/files/' + f.location;
+        img.alt = name;
+        card.appendChild(img);
+      } else {
+        var wrap = document.createElement('div');
+        wrap.className = 'ml-fab-icon';
+        var ic = document.createElement('i');
+        ic.className = iconCls(f.location) + ' fa-2x';
+        wrap.appendChild(ic);
+        card.appendChild(wrap);
+      }
+      var nm = document.createElement('div');
+      nm.className = 'ml-fab-name';
+      nm.title = name;
+      nm.textContent = name;
+      card.appendChild(nm);
+      card.addEventListener('click', function(){
+        document.querySelectorAll('.ml-fab-card').forEach(function(c){c.classList.remove('selected');});
+        card.classList.add('selected');
+        urlFullEl.textContent = url;
+        urlShortEl.textContent = '/files/' + f.location;
+        urlBar.style.display = '';
+        copyFullOk.style.display = 'none';
+        copyShortOk.style.display = 'none';
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  function loadFabFiles(){
+    grid.textContent = '';
+    var spinner = document.createElement('div');
+    spinner.className = 'ml-fab-loading';
+    var ic = document.createElement('i');
+    ic.className = 'fas fa-spinner fa-spin fa-lg';
+    spinner.appendChild(ic);
+    grid.appendChild(spinner);
+    fetch('/api/v1/files?type=page', {credentials:'same-origin'})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        _all = d.data || [];
+        _loaded = true;
+        renderFabGrid();
+      })
+      .catch(function(){
+        setGridMsg('Loading error.', 'text-danger');
+      });
+  }
+
+  fab.addEventListener('click', function(e){
+    e.stopPropagation();
+    var open = popup.style.display !== 'none';
+    popup.style.display = open ? 'none' : '';
+    if(!open && !_loaded) loadFabFiles();
+  });
+
+  document.getElementById('ml-fab-close').addEventListener('click', function(){
+    popup.style.display = 'none';
+  });
+
+  document.addEventListener('click', function(e){
+    if(!document.getElementById('ml-fab-wrap').contains(e.target)){
+      popup.style.display = 'none';
+    }
+  });
+
+  function copyText(text){
+    if(navigator.clipboard && window.isSecureContext){
+      return navigator.clipboard.writeText(text);
+    }
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return Promise.resolve();
+  }
+  function fabCopyFlash(textEl, okEl){
+    copyText(textEl.textContent).then(function(){
+      okEl.style.display = '';
+      setTimeout(function(){okEl.style.display='none';}, 2000);
+    });
+  }
+  copyFullBtn.addEventListener('click', function(){ fabCopyFlash(urlFullEl, copyFullOk); });
+  urlFullEl.addEventListener('click', function(){ fabCopyFlash(urlFullEl, copyFullOk); });
+  copyShortBtn.addEventListener('click', function(){ fabCopyFlash(urlShortEl, copyShortOk); });
+  urlShortEl.addEventListener('click', function(){ fabCopyFlash(urlShortEl, copyShortOk); });
+
+  searchInput.addEventListener('input', function(){
+    if(_loaded) renderFabGrid();
+  });
+}());
+</script>
